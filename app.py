@@ -11,8 +11,8 @@ def check_password():
     
     if not st.session_state.authenticated:
         st.set_page_config(page_title="Logowanie - SQM", layout="centered")
-        st.title("🔐 SQM Multimedia Solutions")
-        st.subheader("System Planowania Transportu")
+        st.title("🔐 Logistics Department")
+        st.subheader("Planer Transportu")
         
         try:
             # Pobranie tylko głównego hasła
@@ -131,10 +131,10 @@ def draw_3d(placed_stacks, vehicle, color_map):
 # --- GŁÓWNY INTERFEJS ---
 if check_password():
     if 'setup_done' not in st.session_state:
-        st.set_page_config(page_title="SQM Logistyka", layout="wide")
+        st.set_page_config(page_title="Logistics Department", layout="wide")
         st.session_state.setup_done = True
 
-    st.title("🚛 SQM Multimedia Solutions - Planer Transportu")
+    st.title("🚛 Logistics Department: Planer Transportu")
 
     if 'cargo_cases' not in st.session_state: st.session_state.cargo_cases = []
     products = load_products()
