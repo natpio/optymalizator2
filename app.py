@@ -115,7 +115,6 @@ with st.sidebar:
             p_data = next(p for p in products if p['name'] == p_name)
             ipc = p_data.get('itemsPerCase', 1)
             needed_cases = math.ceil(qty / ipc)
-            
             for i in range(needed_cases):
                 case = p_data.copy()
                 case['actual_items'] = qty % ipc if (i == needed_cases - 1 and qty % ipc != 0) else ipc
@@ -127,74 +126,73 @@ with st.sidebar:
         st.rerun()
 
 if st.session_state.cargo_cases:
-    # Sortowanie po powierzchni podstawy (malejąco)
     remaining = sorted([dict(c) for c in st.session_state.cargo_cases], key=lambda x: x['width']*x['length'], reverse=True)
     fleet = []
     
     while len(remaining) > 0:
         stacks, weight, not_packed = pack_one_vehicle(remaining, veh)
-        if not stacks: 
-            st.error(f"Nie można zapakować: {remaining[0]['name']} (zbyt duży gabaryt)")
-            break
+        if not stacks: break
         fleet.append({"stacks": stacks, "weight": weight})
         remaining = not_packed
-
-    st.header(f"📊 Planowanie: {len(fleet)}x {v_type}")
 
     for i, res in enumerate(fleet):
         with st.expander(f"🚚 POJAZD #{i+1}", expanded=True):
             col1, col2 = st.columns([3, 2])
             
-            items_in_car = [item for s in res['stacks'] for item in s['items']]
-            df = pd.DataFrame(items_in_car)
+            # --- OBLICZENIA OPARTE O STOSY (FLOOR AREA) ---
+            total_floor_area_cm2 = 0
+            total_volume_cm3 = 0
+            all_items = []
             
-            # Zapewnienie istnienia kolumn do obliczeń
-            if 'actual_items' not in df.columns: df['actual_items'] = 1
-            
-            df['ep'] = (df['width'] * df['length']) / 9600 
-            df['m3'] = (df['width'] * df['length'] * df['height']) / 1000000
-            df['m2'] = (df['width'] * df['length']) / 10000
+            for s in res['stacks']:
+                # Powierzchnia podstawy stosu (tylko raz na stos!)
+                total_floor_area_cm2 += (s['width'] * s['length'])
+                for item in s['items']:
+                    all_items.append(item)
+                    # Objętość liczymy dla każdego elementu w stosie
+                    total_volume_cm3 += (item['width'] * item['length'] * item['height'])
 
+            df = pd.DataFrame(all_items)
+            
             with col1:
                 st.plotly_chart(draw_3d(res['stacks'], veh, f"Wizualizacja #{i+1}"), use_container_width=True)
             
             with col2:
                 st.subheader("📋 Lista załadunkowa")
+                # Tabela zlicza wszystkie sztuki, ale EP policzymy osobno z powierzchni podłogi
                 summary = df.groupby('name').agg({
                     'actual_items': 'sum',
                     'name': 'count',
-                    'ep': 'sum',
                     'weight': 'sum'
                 }).rename(columns={
                     'actual_items': 'Szt. produktu',
                     'name': 'Liczba skrzyń',
-                    'ep': 'Miejsca EP',
                     'weight': 'Waga (kg)'
                 })
-                summary['Miejsca EP'] = summary['Miejsca EP'].round(2)
                 st.table(summary)
                 
-                total_ep = df['ep'].sum()
-                total_m2 = df['m2'].sum()
-                total_m3 = df['m3'].sum()
+                # --- STATYSTYKI WYKORZYSTANIA ---
+                total_ep = total_floor_area_cm2 / 9600
+                total_m2 = total_floor_area_cm2 / 10000
+                total_m3 = total_volume_cm3 / 1000000
                 
                 veh_m2 = (veh['L'] * veh['W']) / 10000
                 veh_m3 = (veh['L'] * veh['W'] * veh['H']) / 1000000
                 
-                st.subheader("📈 Wykorzystanie przestrzeni")
+                st.subheader("📈 Wykorzystanie podłogi (Realne)")
                 m_col1, m_col2, m_col3 = st.columns(3)
                 m_col1.metric("Miejsca EP", f"{total_ep:.2f}")
                 
                 p_m2 = int((total_m2/veh_m2)*100) if veh_m2 > 0 else 0
                 p_m3 = int((total_m3/veh_m3)*100) if veh_m3 > 0 else 0
                 
-                m_col2.metric("Powierzchnia", f"{total_m2:.2f} m²", f"{p_m2}%")
-                m_col3.metric("Objętość", f"{total_m3:.2f} m³", f"{p_m3}%")
+                m_col2.metric("Zajęte m²", f"{total_m2:.2f}", f"{p_m2}%")
+                m_col3.metric("Objętość m³", f"{total_m3:.2f}", f"{p_m3}%")
                 
-                w_perc = min(res['weight'] / veh['maxWeight'], 1.0)
+                st.progress(min(res['weight'] / veh['maxWeight'], 1.0))
                 st.write(f"**Waga:** {res['weight']} / {veh['maxWeight']} kg")
-                st.progress(w_perc)
                 
-                st.caption(f"Wolne: {100 - p_m2}% powierzchni podłogi | {100 - p_m3}% objętości.")
+                st.info(f"Dzięki układaniu w stosy oszczędzasz miejsce. Zajęte {p_m2}% podłogi.")
+
 else:
     st.info("Dodaj sprzęt w panelu bocznym.")
