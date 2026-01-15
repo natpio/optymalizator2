@@ -2,6 +2,7 @@ import streamlit as st
 import json
 import plotly.graph_objects as go
 import math
+import pandas as pd
 
 # --- DANE POJAZDÓW 1:1 Z TWOJEGO PLIKU HTML ---
 VEHICLES = {
@@ -15,11 +16,10 @@ def load_products():
     try:
         with open('products.json', 'r', encoding='utf-8') as f:
             return json.load(f)
-    except FileNotFoundError:
-        st.error("Nie znaleziono pliku products.json!")
+    except Exception:
         return []
 
-# --- LOGIKA PAKOWANIA JEDNEGO POJAZDU (Shelf-Packing z Twojego HTML) ---
+# --- LOGIKA PAKOWANIA JEDNEGO POJAZDU (Shelf-Packing) ---
 def pack_one_vehicle(remaining_cases, vehicle):
     placed_stacks = []
     not_placed = []
@@ -29,13 +29,11 @@ def pack_one_vehicle(remaining_cases, vehicle):
     max_width_in_row = 0
 
     for case in remaining_cases:
-        # Sprawdzenie limitu wagi auta
         if current_weight + case['weight'] > vehicle['maxWeight']:
             not_placed.append(case)
             continue
 
         added_to_stack = False
-        # Próba stackowania (na podstawie wymiarów podstawy i wysokości)
         if case.get('canStack', True):
             for s in placed_stacks:
                 if (s['canStackBase'] and case['width'] == s['width'] and 
@@ -49,15 +47,12 @@ def pack_one_vehicle(remaining_cases, vehicle):
                     added_to_stack = True
                     break
         
-        # Jeśli nie dodano do stosu -> Nowe miejsce na podłodze
         if not added_to_stack:
-            # Sprawdzenie czy mieści się w szerokości (logika półek)
             if current_y + case['length'] > vehicle['W']:
                 current_y = 0
                 current_x += max_width_in_row
                 max_width_in_row = 0
             
-            # Sprawdzenie czy mieści się w długości auta
             if current_x + case['width'] <= vehicle['L']:
                 case_copy = case.copy()
                 case_copy['z_pos'] = 0
@@ -77,94 +72,120 @@ def pack_one_vehicle(remaining_cases, vehicle):
 
     return placed_stacks, current_weight, not_placed
 
-# --- WIZUALIZACJA 3D ---
+# --- WIZUALIZACJA 3D (Z POPRAWIONĄ SKALĄ AUTA) ---
 def draw_3d(placed_stacks, vehicle, title):
     fig = go.Figure()
+    
+    # Rysowanie skrzyń
     for s in placed_stacks:
         for item in s['items']:
             x0, y0, z0 = s['x'], s['y'], item['z_pos']
             dx, dy, dz = s['width'], s['length'], item['height']
+            
+            # Kolor: Błękitny dla stackowalnych, Brązowy dla ciężkich/nie-stackowalnych
+            color = "#4682B4" if item.get('canStack') else "#A52A2A"
+            
             fig.add_trace(go.Mesh3d(
                 x=[x0, x0+dx, x0+dx, x0, x0, x0+dx, x0+dx, x0],
                 y=[y0, y0, y0+dy, y0+dy, y0, y0, y0+dy, y0+dy],
                 z=[z0, z0, z0, z0, z0+dz, z0+dz, z0+dz, z0+dz],
                 i=[7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2], j=[3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3], k=[0, 7, 2, 3, 6, 7, 1, 1, 5, 5, 7, 6],
-                opacity=0.8, color="#4682B4" if item.get('canStack') else "#A52A2A", name=item['name']
+                opacity=0.8, color=color, name=item['name'],
+                hovertemplate=f"<b>{item['name']}</b><br>Pozycja: {x0}x{y0}cm<br>Waga: {item['weight']}kg"
             ))
-    fig.update_layout(title=title, scene=dict(
-        xaxis_title="Długość", yaxis_title="Szerokość", zaxis_title="Wysokość",
-        aspectmode='manual', aspectratio=dict(x=vehicle['L']/vehicle['W'], y=1, z=vehicle['H']/vehicle['W'])
-    ))
+
+    # Obramowanie naczepy (kontur)
+    fig.add_trace(go.Box(x=[0, vehicle['L']], y=[0, vehicle['W']], z=[0, vehicle['H']], opacity=0, showlegend=False))
+
+    fig.update_layout(
+        title=title,
+        scene=dict(
+            xaxis=dict(range=[0, vehicle['L']], title="Długość"),
+            yaxis=dict(range=[0, vehicle['W']], title="Szerokość"),
+            zaxis=dict(range=[0, vehicle['H']], title="Wysokość"),
+            aspectmode='manual',
+            # Klucz do czytelności: aspectratio zachowuje proporcje typu pojazdu
+            aspectratio=dict(x=vehicle['L']/vehicle['W'], y=1, z=vehicle['H']/vehicle['W'])
+        ),
+        margin=dict(l=0, r=0, b=0, t=40)
+    )
     return fig
 
-# --- INTERFEJS STREAMLIT ---
-st.set_page_config(page_title="SQM Fleet Planner", layout="wide")
-st.title("🚛 SQM Multimedia - Planowanie Załadunku")
+# --- INTERFEJS ---
+st.set_page_config(page_title="SQM Logistyka", layout="wide")
+st.title("🚛 SQM Multimedia - Planer Floty")
 
 if 'cargo_cases' not in st.session_state: st.session_state.cargo_cases = []
 products = load_products()
 
 with st.sidebar:
-    st.header("1. Wybierz Typ Auta")
-    v_type = st.selectbox("Domyślny pojazd:", list(VEHICLES.keys()))
+    st.header("1. Wybierz Typ Pojazdu")
+    v_type = st.selectbox("Domyślne auto:", list(VEHICLES.keys()))
     veh = VEHICLES[v_type]
     
     st.divider()
     st.header("2. Dodaj Sprzęt")
     p_name = st.selectbox("Produkt:", [p['name'] for p in products])
-    total_qty = st.number_input("Ilość sztuk produktu:", min_value=1, value=1)
+    total_items = st.number_input("Ilość sztuk:", min_value=1, value=1)
     
-    if st.button("Dodaj do listy"):
+    if st.button("Dodaj do planu"):
         p_data = next(p for p in products if p['name'] == p_name)
-        
-        # LOGIKA TWOJEGO HTML: Przeliczanie sztuk na skrzynie
         ipc = p_data.get('itemsPerCase', 1)
-        needed_cases = math.ceil(total_qty / ipc)
+        needed_cases = math.ceil(total_items / ipc)
         
-        for i in range(needed_cases):
+        for _ in range(needed_cases):
             case = p_data.copy()
-            case['unique_id'] = f"{p_name}_{len(st.session_state.cargo_cases)}_{i}"
+            case['original_qty'] = total_items # zapamiętujemy ile sztuk dodano
             st.session_state.cargo_cases.append(case)
-        
-        st.success(f"Dodano {total_qty} szt. = {needed_cases} skrzyń transportowych.")
+        st.success(f"Dodano {total_items} szt. = {needed_cases} skrzyń.")
 
-    if st.button("Wyczyść plan"):
+    if st.button("Wyczyść wszystko"):
         st.session_state.cargo_cases = []
         st.rerun()
 
-# --- PROCES OBLICZEŃ FLOTY ---
+# PROCESOWANIE WYNIKÓW
 if st.session_state.cargo_cases:
-    # Sortowanie skrzyń (największe na początku - identycznie jak w JS)
-    remaining = sorted([dict(c) for c in st.session_state.cargo_cases], 
-                       key=lambda x: x['width'] * x['length'], reverse=True)
+    remaining = sorted([dict(c) for c in st.session_state.cargo_cases], key=lambda x: x['width'] * x['length'], reverse=True)
+    fleet = []
     
-    fleet_results = []
     while len(remaining) > 0:
         stacks, weight, not_packed = pack_one_vehicle(remaining, veh)
-        
-        # Zabezpieczenie przed błędem, jeśli skrzynia jest za duża dla typu auta
-        if not stacks and remaining:
-            st.error(f"⚠️ Skrzynia '{remaining[0]['name']}' ({remaining[0]['width']}x{remaining[0]['length']}cm) nie mieści się w wybranym aucie ({veh['L']}x{veh['W']}cm)!")
-            break
-            
-        fleet_results.append({"stacks": stacks, "weight": weight})
+        if not stacks: break
+        fleet.append({"stacks": stacks, "weight": weight})
         remaining = not_packed
 
-    st.header(f"📊 Wynik: Potrzebujesz {len(fleet_results)} pojazdów typu {v_type}")
+    st.header(f"📊 Potrzebne pojazdy: {len(fleet)} x {v_type}")
 
-    # Wyświetlanie wyników dla każdego auta
-    for i, res in enumerate(fleet_results):
-        with st.expander(f"🚛 Pojazd #{i+1} - Załadunek", expanded=(i==0)):
-            c1, c2 = st.columns([2, 1])
-            with c1:
+    for i, res in enumerate(fleet):
+        with st.expander(f"🚚 Pojazd #{i+1} - Kliknij by rozwinąć", expanded=(i==0)):
+            col_chart, col_list = st.columns([1, 1])
+            
+            with col_chart:
                 st.plotly_chart(draw_3d(res['stacks'], veh, f"Plan auta #{i+1}"), use_container_width=True)
-            with c2:
-                st.metric("Waga", f"{res['weight']} kg", f"limit {veh['maxWeight']} kg")
-                total_area = sum(s['width'] * s['length'] for s in res['stacks'])
-                st.metric("Miejsca paletowe", f"{total_area/(120*80):.2f}", f"limit {veh['maxPallets']}")
+                st.write(f"**Wykorzystanie wagi:** {res['weight']} / {veh['maxWeight']} kg")
+            
+            with col_list:
+                st.subheader("📋 Lista załadunkowa (Sztuki skrzyń)")
                 
-                st.write("**Lista stosów w tym aucie:**")
-                for idx, s in enumerate(res['stacks']):
-                    st.write(f"Stos {idx+1}: {len(s['items'])} skrzyń ({s['width']}x{s['length']} cm)")
+                # Przygotowanie danych do czytelnej tabeli
+                items_in_vehicle = []
+                for s in res['stacks']:
+                    for item in s['items']:
+                        items_in_vehicle.append(item)
+                
+                if items_in_vehicle:
+                    df = pd.DataFrame(items_in_vehicle)
+                    # Grupowanie takich samych skrzyń
+                    summary = df.groupby('name').agg({
+                        'name': 'count',
+                        'width': 'first',
+                        'length': 'first',
+                        'height': 'first',
+                        'weight': 'sum'
+                    }).rename(columns={'name': 'Liczba skrzyń', 'weight': 'Waga łączna (kg)'})
+                    
+                    st.table(summary)
+                    
+                    st.info("💡 Legenda wizualizacji:\n- **Niebieski:** Case'y stackowalne\n- **Brązowy:** Case'y ciężkie / bez stackowania")
 else:
-    st.info("Lista ładunkowa jest pusta. Dodaj sprzęt w panelu bocznym.")
+    st.info("Dodaj produkty, aby zobaczyć planowanie wielu aut i listę sprzętu.")
