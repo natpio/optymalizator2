@@ -3,7 +3,7 @@
   {"id": 2, "name": "24-32\" - plastic case", "width": 60, "length": 40, "height": 20, "weight": 15, "canStack": true, "itemsPerCase": 1},
   {"id": 3, "name": "32\" - triple - STANDARD", "width": 90, "length": 50, "height": 70, "weight": 50, "canStack": true, "itemsPerCase": 3},
   {"id": 4, "name": "43\" - triple - STANDARD", "width": 112, "length": 42, "height": 80, "weight": 90, "canStack": true, "itemsPerCase": 3},
-  {"id": 5, "name": "45\"-55\" - double - STANDARD", "width": 140, "length": 42, "height": 100, "weight": 150, "canStack": false, "itemsPerCase": 2},
+  {"id": 5, "name": "45\"-55\" - double - STANDARD", "width": 140, "length": 42, "height": 100, "weight": 150, "canStack": true, "itemsPerCase": 2},
   {"id": 6, "name": "60-65\" - double - STANDARD", "width": 160, "length": 40, "height": 230, "weight": 200, "canStack": false, "itemsPerCase": 2},
   {"id": 7, "name": "75-86\" - double - STANDARD", "width": 210, "length": 40, "height": 230, "weight": 230, "canStack": false, "itemsPerCase": 2},
   {"id": 8, "name": "98\" - double - STANDARD", "width": 250, "length": 70, "height": 230, "weight": 400, "canStack": false, "itemsPerCase": 1},
