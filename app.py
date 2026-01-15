@@ -1,12 +1,10 @@
 import streamlit as st
 import plotly.graph_objects as go
-import pandas as pd
 import numpy as np
 
-# Konfiguracja strony
 st.set_page_config(page_title="SQM Multimedia Solutions - Planer Załadunku", layout="wide")
 
-# --- KOMPLETNA BAZA PRODUKTÓW Z TWOJEGO PLIKU HTML ---
+# --- PEŁNA BAZA PRODUKTÓW WYCIĄGNIĘTA Z TWOJEGO PLIKU HTML ---
 PRODUCTS_DATA = {
     "17-23\" - plastic case": {"l": 80, "w": 60, "h": 20, "weight": 20, "items_per_case": 1, "stackable": True},
     "24-32\" - plastic case": {"l": 60, "w": 40, "h": 20, "weight": 15, "items_per_case": 1, "stackable": True},
@@ -121,8 +119,8 @@ VEHICLES_DATA = {
 
 EURO_PALLET_AREA = 120 * 80
 
-def draw_3d_box(fig, x, y, z, l, w, h, name, color, opacity=0.6):
-    # Punkty wierzchołkowe prostopadłościanu
+def draw_3d_box(fig, x, y, z, l, w, h, name, color):
+    # Prostopadłościan 3D dla Plotly
     fig.add_trace(go.Mesh3d(
         x=[x, x, x+w, x+w, x, x, x+w, x+w],
         y=[y, y+l, y+l, y, y, y+l, y+l, y],
@@ -130,150 +128,127 @@ def draw_3d_box(fig, x, y, z, l, w, h, name, color, opacity=0.6):
         i=[7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2],
         j=[3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3],
         k=[0, 7, 2, 3, 6, 7, 1, 6, 5, 5, 7, 6],
-        opacity=opacity, color=color, name=name, showlegend=False,
-        hoverinfo='name+text', text=f"Wymiary: {w}x{l}x{h} cm"
+        opacity=0.6,
+        color=color,
+        name=name,
+        showlegend=False
     ))
 
-st.title("📦 SQM Multimedia Solutions - Planer Załadunku v2")
+st.title("📦 SQM Multimedia Solutions - Planer Załadunku")
 
-col_input, col_viz = st.columns([1, 2])
+col1, col2 = st.columns([1, 2])
 
-with col_input:
-    st.header("1. Konfiguracja")
+with col1:
+    st.header("Konfiguracja")
     v_type = st.selectbox("Wybierz pojazd:", list(VEHICLES_DATA.keys()))
     veh = VEHICLES_DATA[v_type]
-
-    if 'cargo_rows' not in st.session_state:
-        st.session_state.cargo_rows = 1
+    
+    if 'rows' not in st.session_state:
+        st.session_state.rows = 1
 
     to_pack = []
-    # Dynamiczna lista produktów
-    for i in range(st.session_state.cargo_rows):
+    for i in range(st.session_state.rows):
         with st.expander(f"Ładunek #{i+1}", expanded=True):
-            p_key = st.selectbox("Produkt", sorted(list(PRODUCTS_DATA.keys())), key=f"p_{i}")
-            p_def = PRODUCTS_DATA[p_key]
+            p_name = st.selectbox(f"Produkt", sorted(list(PRODUCTS_DATA.keys())), key=f"p_{i}")
+            p_ref = PRODUCTS_DATA[p_name]
             
-            # Formularz z domyślnymi wartościami z bazy
-            l = st.number_input("Długość (cm)", value=int(p_def['l']), key=f"l_{i}")
-            w = st.number_input("Szerokość (cm)", value=int(p_def['w']), key=f"w_{i}")
-            h = st.number_input("Wysokość (cm)", value=int(p_def['h']), key=f"h_{i}")
-            wt = st.number_input("Waga/case (kg)", value=float(p_def['weight']), key=f"wt_{i}")
+            l = st.number_input("Długość (cm)", value=int(p_ref['l']), key=f"l_{i}")
+            w = st.number_input("Szerokość (cm)", value=int(p_ref['w']), key=f"w_{i}")
+            h = st.number_input("Wysokość (cm)", value=int(p_ref['h']), key=f"h_{i}")
+            wt = st.number_input("Waga/case (kg)", value=float(p_ref['weight']), key=f"wt_{i}")
             qty = st.number_input("Ilość produktów", min_value=1, value=1, key=f"qty_{i}")
-            stack_check = st.checkbox("Można stawiać jeden na drugim?", value=p_def['stackable'], key=f"st_{i}")
+            stackable = st.checkbox("Można stawiać na nim?", value=p_ref['stackable'], key=f"s_{i}")
             
-            num_cases = int(np.ceil(qty / p_def['items_per_case']))
-            st.info(f"Skrzyń do planowania: {num_cases}")
+            cases_needed = int(np.ceil(qty / p_ref['items_per_case']))
+            st.caption(f"Liczba skrzyń: {cases_needed}")
             
-            for _ in range(num_cases):
+            for _ in range(cases_needed):
                 to_pack.append({
-                    "name": p_key, "l": l, "w": w, "h": h, "weight": wt, 
-                    "stackable": stack_check, "area": l * w
+                    "name": p_name, "l": l, "w": w, "h": h, "weight": wt, 
+                    "stackable": stackable, "area": l * w
                 })
 
-    if st.button("➕ Dodaj kolejną pozycję"):
-        st.session_state.cargo_rows += 1
+    if st.button("➕ Dodaj kolejny ładunek"):
+        st.session_state.rows += 1
         st.rerun()
 
-with col_viz:
-    st.header("2. Wizualizacja 3D i Raport")
+with col2:
+    st.header("Wizualizacja 3D")
     
-    # LOGIKA FIRST-FIT (Identyczna z JS)
+    # LOGIKA IDENTYCZNA Z TWOIM HTML (First-Fit + Guillotine Split)
     to_pack.sort(key=lambda x: x['area'], reverse=True)
     
     placed_stacks = []
     unloaded = []
-    total_weight = 0
-    total_area_floor = 0
+    total_w = 0
+    floor_area_cm2 = 0
     
-    # Przestrzeń podłogowa paki
-    available_spaces = [{"x": 0, "y": 0, "w": veh['w'], "l": veh['l']}]
+    # Paka pojazdu jako przestrzeń początkowa
+    spaces = [{"x": 0, "y": 0, "w": veh['w'], "l": veh['l']}]
 
     for item in to_pack:
-        placed = False
+        packed = False
         
-        # 1. Próba stackowania na istniejących stosach
+        # 1. Próba stackowania
         if item['stackable']:
             for stack in placed_stacks:
                 if stack['can_stack'] and item['l'] <= stack['l'] and item['w'] <= stack['w'] \
                    and (stack['curr_h'] + item['h']) <= veh['h'] \
-                   and (total_weight + item['weight']) <= veh['weight']:
+                   and (total_w + item['weight']) <= veh['weight']:
                     
                     stack['items'].append({"z": stack['curr_h'], "h": item['h'], "name": item['name']})
                     stack['curr_h'] += item['h']
-                    total_weight += item['weight']
-                    placed = True
+                    total_w += item['weight']
+                    packed = True
                     break
         
-        # 2. Próba postawienia na nowym miejscu na podłodze
-        if not placed:
-            # Sortowanie wolnych przestrzeni (zgodnie z logiką JS)
-            available_spaces.sort(key=lambda s: (s['l'] * s['w']))
-            
-            for idx, space in enumerate(available_spaces):
-                # Sprawdzamy oba obroty (0 i 90 stopni)
-                if (item['l'] <= space['l'] and item['w'] <= space['w']) or (item['w'] <= space['l'] and item['l'] <= space['w']):
+        # 2. Próba na podłodze
+        if not packed:
+            for idx, space in enumerate(spaces):
+                if item['l'] <= space['l'] and item['w'] <= space['w'] \
+                   and (total_w + item['weight']) <= veh['weight']:
                     
-                    # Jeśli trzeba obrócić
-                    if not (item['l'] <= space['l'] and item['w'] <= space['w']):
-                        item['l'], item['w'] = item['w'], item['l']
-
-                    if (total_weight + item['weight']) <= veh['weight']:
-                        new_stack = {
-                            "x": space['x'], "y": space['y'], "w": item['w'], "l": item['l'],
-                            "curr_h": item['h'], "can_stack": item['stackable'],
-                            "items": [{"z": 0, "h": item['h'], "name": item['name']}]
-                        }
-                        placed_stacks.append(new_stack)
-                        total_weight += item['weight']
-                        total_area_floor += (item['l'] * item['w'])
-                        
-                        # Podział przestrzeni ( Guillotine Split)
-                        available_spaces.pop(idx)
-                        if space['w'] - item['w'] > 0:
-                            available_spaces.append({"x": space['x'] + item['w'], "y": space['y'], "w": space['w'] - item['w'], "l": item['l']})
-                        if space['l'] - item['l'] > 0:
-                            available_spaces.append({"x": space['x'], "y": space['y'] + item['l'], "w": space['w'], "l": space['l'] - item['l']})
-                        
-                        placed = True
-                        break
+                    new_stack = {
+                        "x": space['x'], "y": space['y'], "w": item['w'], "l": item['l'],
+                        "curr_h": item['h'], "can_stack": item['stackable'],
+                        "items": [{"z": 0, "h": item['h'], "name": item['name']}]
+                    }
+                    placed_stacks.append(new_stack)
+                    total_w += item['weight']
+                    floor_area_cm2 += item['area']
+                    
+                    # Guillotine Split (zgodnie z JS)
+                    spaces.pop(idx)
+                    if space['w'] - item['w'] > 0:
+                        spaces.append({"x": space['x'] + item['w'], "y": space['y'], "w": space['w'] - item['w'], "l": item['l']})
+                    if space['l'] - item['l'] > 0:
+                        spaces.append({"x": space['x'], "y": space['y'] + item['l'], "w": space['w'], "l": space['l'] - item['l']})
+                    
+                    spaces.sort(key=lambda s: s['w'] * s['l'])
+                    packed = True
+                    break
             
-            if not placed:
+            if not packed:
                 unloaded.append(item)
 
-    # Rysowanie w Plotly
+    # Rysowanie paki i ładunku
     fig = go.Figure()
+    draw_3d_box(fig, 0, 0, 0, veh['l'], veh['w'], veh['h'], "Pojazd", "lightgrey")
     
-    # Obrys pojazdu
-    draw_3d_box(fig, 0, 0, 0, veh['l'], veh['w'], veh['h'], "Pojazd", "rgba(100,100,100,0.05)", 0.1)
-    
-    # Kolory dla różnych typów skrzyń
-    palette = ["#A52A2A", "#4682B4", "#5F9EA0", "#B8860B", "#8B4513", "#2E8B57", "#6A5ACD"]
-    
+    colors = ["#A52A2A", "#4682B4", "#5F9EA0", "#B8860B", "#8B4513", "#2E8B57"]
     for i, stack in enumerate(placed_stacks):
-        color = palette[i % len(palette)]
+        c = colors[i % len(colors)]
         for sub in stack['items']:
-            draw_3d_box(fig, stack['x'], stack['y'], sub['z'], stack['l'], stack['w'], sub['h'], sub['name'], color)
+            draw_3d_box(fig, stack['x'], stack['y'], sub['z'], stack['l'], stack['w'], sub['h'], sub['name'], c)
 
-    fig.update_layout(
-        scene=dict(
-            xaxis_title="Szerokość (cm)",
-            yaxis_title="Długość (cm)",
-            zaxis_title="Wysokość (cm)",
-            aspectmode='data'
-        ),
-        margin=dict(l=0, r=0, b=0, t=0),
-        height=700
-    )
+    fig.update_layout(scene=dict(aspectmode='data'), margin=dict(l=0, r=0, b=0, t=0), height=600)
     st.plotly_chart(fig, use_container_width=True)
 
-    # --- PODSUMOWANIE ---
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Waga całkowita", f"{int(total_weight)} / {veh['weight']} kg")
-    c2.metric("Miejsca paletowe", f"{round(total_area_floor/EURO_PALLET_AREA, 2)} / {veh['pallets']}")
-    c3.metric("Załadowano", f"{len(to_pack)-len(unloaded)} / {len(to_pack)} skrzyń")
+    # Statystyki
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Waga", f"{total_w} / {veh['weight']} kg")
+    m2.metric("Palety", f"{round(floor_area_cm2/EURO_PALLET_AREA, 2)} / {veh['pallets']}")
+    m3.metric("Załadowano", f"{len(to_pack)-len(unloaded)} / {len(to_pack)}")
 
     if unloaded:
-        st.error(f"⚠️ Nie zmieściło się: {len(unloaded)} sztuk")
-        with st.expander("Lista brakujących elementów"):
-            for u in unloaded:
-                st.write(f"- {u['name']} ({u['l']}x{u['w']}x{u['h']})")
+        st.error(f"⚠️ Nie zmieściło się {len(unloaded)} skrzyń!")
