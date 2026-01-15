@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 import math
 import pandas as pd
 
-# --- ZABEZPIECZENIA (TYLKO GŁÓWNE HASŁO ZE SECRETS) ---
+# --- ZABEZPIECZENIA ---
 def check_password():
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
@@ -15,11 +15,9 @@ def check_password():
         st.subheader("Planer Transportu")
         
         try:
-            # Pobranie tylko głównego hasła
             master_password = str(st.secrets["password"])
         except Exception:
             st.error("🔒 Brak konfiguracji hasła głównego w Streamlit Secrets.")
-            st.info("Dodaj klucz 'password' w panelu Settings -> Secrets.")
             return False
 
         pwd = st.text_input("Podaj hasło dostępu:", type="password")
@@ -50,7 +48,9 @@ def get_color_map(products):
 def load_products():
     try:
         with open('products.json', 'r', encoding='utf-8') as f:
-            return json.load(f)
+            data = json.load(f)
+            # Sortowanie alfabetyczne produktów dla łatwiejszego wyszukiwania
+            return sorted(data, key=lambda x: x['name'])
     except Exception:
         return []
 
@@ -128,7 +128,7 @@ def draw_3d(placed_stacks, vehicle, color_map):
     ), margin=dict(l=0, r=0, b=0, t=0))
     return fig
 
-# --- GŁÓWNY INTERFEJS ---
+# --- INTERFEJS ---
 if check_password():
     if 'setup_done' not in st.session_state:
         st.set_page_config(page_title="Logistics Department", layout="wide")
@@ -148,20 +148,30 @@ if check_password():
         st.divider()
         st.header("2. Dodaj Sprzęt")
         if products:
-            p_name = st.selectbox("Produkt:", [p['name'] for p in products])
+            # Wyszukiwarka zintegrowana z selectboxem
+            p_name = st.selectbox(
+                "Wyszukaj i wybierz produkt:", 
+                options=[p['name'] for p in products],
+                index=None,
+                placeholder="Zacznij pisać nazwę..."
+            )
+            
             qty = st.number_input("Liczba sztuk:", min_value=1, value=1)
             
-            if st.button("Dodaj do planu"):
-                p_data = next(p for p in products if p['name'] == p_name)
-                ipc = p_data.get('itemsPerCase', 1)
-                needed_cases = math.ceil(qty / ipc)
-                for i in range(needed_cases):
-                    case = p_data.copy()
-                    case['actual_items'] = qty % ipc if (i == needed_cases - 1 and qty % ipc != 0) else ipc
-                    st.session_state.cargo_cases.append(case)
-                st.success(f"Dodano {qty} szt.")
+            if st.button("Dodaj do planu", use_container_width=True):
+                if p_name:
+                    p_data = next(p for p in products if p['name'] == p_name)
+                    ipc = p_data.get('itemsPerCase', 1)
+                    needed_cases = math.ceil(qty / ipc)
+                    for i in range(needed_cases):
+                        case = p_data.copy()
+                        case['actual_items'] = qty % ipc if (i == needed_cases - 1 and qty % ipc != 0) else ipc
+                        st.session_state.cargo_cases.append(case)
+                    st.success(f"Dodano {p_name}")
+                else:
+                    st.warning("Najpierw wybierz produkt!")
 
-        if st.button("Wyczyść listę"):
+        if st.button("Wyczyść listę załadunkową", use_container_width=True):
             st.session_state.cargo_cases = []
             st.rerun()
 
@@ -206,7 +216,7 @@ if check_password():
                     veh_m2 = (veh['L'] * veh['W']) / 10000
                     veh_m3 = (veh['L'] * veh['W'] * veh['H']) / 1000000
                     
-                    st.subheader("📈 Wykorzystanie podłogi")
+                    st.subheader("📈 Wykorzystanie")
                     m1, m2, m3 = st.columns(3)
                     m1.metric("Miejsca EP", f"{total_ep:.2f}")
                     m2.metric("Zajęte m²", f"{total_m2:.2f}", f"{int((total_m2/veh_m2)*100)}%")
@@ -215,4 +225,4 @@ if check_password():
                     st.progress(min(res['weight'] / veh['maxWeight'], 1.0))
                     st.write(f"**Waga całkowita:** {res['weight']} / {veh['maxWeight']} kg")
     else:
-        st.info("System gotowy. Wybierz sprzęt z listy po lewej stronie.")
+        st.info("System gotowy. Zacznij wpisywać nazwę produktu w wyszukiwarce po lewej stronie.")
