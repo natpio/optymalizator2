@@ -30,7 +30,7 @@ def check_password():
         return False
     return True
 
-# --- 2. KONFIGURACJA ---
+# --- 2. KONFIGURACJA POJAZDÓW ---
 VEHICLES = {
     "BUS": {"maxWeight": 1100, "L": 450, "W": 150, "H": 245},
     "6m": {"maxWeight": 3500, "L": 600, "W": 245, "H": 245},
@@ -160,8 +160,13 @@ if check_password():
             with st.expander(f"🚚 POJAZD #{i+1}", expanded=True):
                 c1, c2 = st.columns([3, 2])
                 
+                # OBLICZENIA STATYSTYCZNE
                 floor_cm2 = sum(s['width']*s['length'] for s in res['stacks'])
                 vol_cm3 = sum(item['width']*item['length']*item['height'] for s in res['stacks'] for item in s['items'])
+                
+                veh_floor_cm2 = veh['L'] * veh['W']
+                veh_vol_cm3 = veh['L'] * veh['W'] * veh['H']
+                
                 all_i = [item for s in res['stacks'] for item in s['items']]
                 df = pd.DataFrame(all_i)
 
@@ -177,8 +182,10 @@ if check_password():
                     st.subheader("📈 Wykorzystanie")
                     m1, m2, m3 = st.columns(3)
                     m1.metric("Miejsca EP", f"{floor_cm2/9600:.2f}")
-                    m2.metric("Powierzchnia m²", f"{floor_cm2/10000:.2f}", f"{int((floor_cm2/(veh['L']*veh['W']))*100)}%")
-                    m3.metric("Objętość m³", f"{vol_cm3/1000000:.2f}")
+                    # Procent powierzchni
+                    m2.metric("Powierzchnia m²", f"{floor_cm2/10000:.2f}", f"{int((floor_cm2/veh_floor_cm2)*100)}%")
+                    # DODANO: Procent objętości
+                    m3.metric("Objętość m³", f"{vol_cm3/1000000:.2f}", f"{int((vol_cm3/veh_vol_cm3)*100)}%")
                     
                     st.progress(min(res['weight'] / veh['maxWeight'], 1.0))
                     st.write(f"**Waga:** {res['weight']} / {veh['maxWeight']} kg")
