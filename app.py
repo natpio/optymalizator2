@@ -30,7 +30,7 @@ def check_password():
         return False
     return True
 
-# --- KONFIGURACJA ---
+# --- KONFIGURACJA POJAZDÓW ---
 VEHICLES = {
     "BUS": {"maxWeight": 1100, "L": 450, "W": 150, "H": 245},
     "6m": {"maxWeight": 3500, "L": 600, "W": 245, "H": 245},
@@ -38,11 +38,9 @@ VEHICLES = {
     "FTL": {"maxWeight": 12000, "L": 1360, "W": 245, "H": 265}
 }
 
-# Rozszerzona paleta wyrazistych kolorów
 COLOR_PALETTE = [
     "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", 
-    "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
-    "#FFD700", "#FF1493", "#00FF00", "#4B0082"
+    "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"
 ]
 
 def load_products():
@@ -95,12 +93,8 @@ def pack_one_vehicle(remaining_cases, vehicle):
                 not_placed.append(case)
     return placed_stacks, current_weight, not_placed
 
-def draw_3d(placed_stacks, vehicle):
+def draw_3d(placed_stacks, vehicle, color_map):
     fig = go.Figure()
-    
-    # Dynamiczne mapowanie kolorów na podstawie unikalnych nazw w aktualnym załadunku
-    unique_names = list(set(item['name'] for s in placed_stacks for item in s['items']))
-    color_map = {name: COLOR_PALETTE[i % len(COLOR_PALETTE)] for i, name in enumerate(unique_names)}
 
     for s in placed_stacks:
         for item in s['items']:
@@ -112,7 +106,7 @@ def draw_3d(placed_stacks, vehicle):
                 y=[y0, y0, y0+dy, y0+dy, y0, y0, y0+dy, y0+dy],
                 z=[z0, z0, z0, z0, z0+dz, z0+dz, z0+dz, z0+dz],
                 i=[7,0,0,0,4,4,6,6,4,0,3,2], j=[3,4,1,2,5,6,5,2,0,1,6,3], k=[0,7,2,3,6,7,1,1,5,5,7,6],
-                opacity=0.9, color=color_map[item['name']], name=item['name'], showlegend=True
+                opacity=0.9, color=color_map.get(item['name'], "#808080"), name=item['name'], showlegend=False
             ))
             
     fig.update_layout(scene=dict(
@@ -123,34 +117,41 @@ def draw_3d(placed_stacks, vehicle):
     ), margin=dict(l=0, r=0, b=0, t=0))
     return fig
 
-# --- APP ---
+# --- APLIKACJA ---
 if check_password():
     if 'setup' not in st.session_state:
         st.set_page_config(page_title="Logistics Dept", layout="wide")
         st.session_state.setup = True
 
     st.title("🚛 Logistics Department: Planer Transportu")
+    
     if 'cargo' not in st.session_state: st.session_state.cargo = []
     
+    # Zarządzanie kolorami produktów w sesji
+    prods = load_products()
+    if 'color_map' not in st.session_state:
+        st.session_state.color_map = {p['name']: COLOR_PALETTE[i % len(COLOR_PALETTE)] for i, p in enumerate(prods)}
+
     with st.sidebar:
         st.header("1. Parametry Auta")
-        veh = VEHICLES[st.selectbox("Pojazd:", list(VEHICLES.keys()))]
+        veh_name = st.selectbox("Pojazd:", list(VEHICLES.keys()))
+        veh = VEHICLES[veh_name]
         st.divider()
         st.header("2. Dodaj Sprzęt")
-        prods = load_products()
-        p_name = st.selectbox("Produkt:", [p['name'] for p in prods], index=None, placeholder="Szukaj...")
-        qty = st.number_input("Sztuk:", min_value=1, value=1)
+        p_name = st.selectbox("Produkt:", [p['name'] for p in prods], index=None, placeholder="Szukaj produktu...")
+        qty = st.number_input("Sztuk produktu:", min_value=1, value=1)
         
         if st.button("Dodaj do planu", use_container_width=True) and p_name:
             p_data = next(p for p in prods if p['name'] == p_name)
             ipc = p_data.get('itemsPerCase', 1)
-            for i in range(math.ceil(qty/ipc)):
+            num_cases = math.ceil(qty / ipc)
+            for i in range(num_cases):
                 c = p_data.copy()
-                c['actual_items'] = qty % ipc if (i == math.ceil(qty/ipc)-1 and qty % ipc != 0) else ipc
+                c['actual_items'] = qty % ipc if (i == num_cases - 1 and qty % ipc != 0) else ipc
                 st.session_state.cargo.append(c)
             st.success(f"Dodano: {p_name}")
         
-        if st.button("Wyczyść listę", use_container_width=True):
+        if st.button("Wyczyść listę załadunkową", use_container_width=True):
             st.session_state.cargo = []
             st.rerun()
 
@@ -166,13 +167,21 @@ if check_password():
         for i, res in enumerate(fleet):
             with st.expander(f"🚚 POJAZD #{i+1}", expanded=True):
                 c1, c2 = st.columns([3, 2])
-                with c1: st.plotly_chart(draw_3d(res['stacks'], veh), use_container_width=True)
+                with c1: 
+                    # KLUCZOWE: Dodanie unikalnego parametru 'key' naprawia błąd DuplicateElementId
+                    st.plotly_chart(
+                        draw_3d(res['stacks'], veh, st.session_state.color_map), 
+                        use_container_width=True, 
+                        key=f"chart_{i}_{len(st.session_state.cargo)}"
+                    )
                 with c2:
                     st.subheader("📋 Zawartość")
                     all_i = [item for s in res['stacks'] for item in s['items']]
                     df = pd.DataFrame(all_i)
                     st.table(df.groupby('name').agg({'actual_items':'sum', 'weight':'sum'}).rename(columns={'actual_items':'Sztuk','weight':'Waga (kg)'}))
                     
-                    floor = sum(s['width']*s['length'] for s in res['stacks'])
-                    st.metric("Miejsca EP", f"{floor/9600:.2f}")
-                    st.write(f"**Waga:** {res['weight']} / {veh['maxWeight']} kg")
+                    floor_area = sum(s['width']*s['length'] for s in res['stacks'])
+                    st.metric("Miejsca EP", f"{floor_area/9600:.2f}")
+                    st.write(f"**Waga całkowita:** {res['weight']} / {veh['maxWeight']} kg")
+    else:
+        st.info("System gotowy. Wybierz sprzęt z listy po lewej stronie.")
