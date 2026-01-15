@@ -3,24 +3,36 @@ import json
 import plotly.graph_objects as go
 import math
 import pandas as pd
-import hashlib
 
-# --- KONFIGURACJA I ZABEZPIECZENIA ---
-PASSWORD_HASH = "711116a4d0f9ccf33c545ec650b11676d18c1440" # Domyślne: "admin123" (SHA1)
-
+# --- ZABEZPIECZENIA (STREAMLIT SECRETS) ---
 def check_password():
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
     
     if not st.session_state.authenticated:
-        st.title("🔐 Logowanie - SQM Logistyka")
-        pwd = st.text_input("Podaj hasło dostępu:", type="password")
+        st.set_page_config(page_title="Logowanie - SQM", layout="centered")
+        st.title("🔐 SQM Multimedia Solutions")
+        st.subheader("System Planowania Transportu")
+        
+        # Próba pobrania haseł z secrets (chmura) lub zmiennych środowiskowych
+        try:
+            valid_keys = [
+                str(st.secrets["password"]),
+                str(st.secrets["kaczmarek_pin"]),
+                str(st.secrets["dukiel_pin"])
+            ]
+        except Exception:
+            st.error("🔒 Błąd krytyczny: Brak konfiguracji haseł w Streamlit Secrets.")
+            st.info("Dodaj klucze 'password', 'kaczmarek_pin' i 'dukiel_pin' w panelu Settings -> Secrets.")
+            return False
+
+        pwd = st.text_input("Podaj hasło lub PIN:", type="password")
         if st.button("Zaloguj"):
-            if hashlib.sha1(pwd.encode()).hexdigest() == PASSWORD_HASH:
+            if pwd in valid_keys:
                 st.session_state.authenticated = True
                 st.rerun()
             else:
-                st.error("Nieprawidłowe hasło.")
+                st.error("Nieprawidłowe dane dostępu.")
         return False
     return True
 
@@ -32,21 +44,22 @@ VEHICLES = {
     "FTL": {"maxWeight": 12000, "L": 1360, "W": 245, "H": 265}
 }
 
-# --- PALETA KOLORÓW DLA PRODUKTÓW ---
-COLORS = [
-    "#4682B4", "#A52A2A", "#2E8B57", "#DAA520", "#6A5ACD", 
-    "#FF4500", "#20B2AA", "#800080", "#556B2F", "#D2691E"
+# --- PALETA KOLORÓW DLA RÓŻNYCH PRODUKTÓW ---
+PRODUCT_COLORS = [
+    "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", 
+    "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"
 ]
 
-def get_product_colors(products):
-    return {p['name']: COLORS[i % len(COLORS)] for i, p in enumerate(products)}
+def get_color_map(products):
+    return {p['name']: PRODUCT_COLORS[i % len(PRODUCT_COLORS)] for i, p in enumerate(products)}
 
-# --- LOGIKA PAKOWANIA (Bez zmian) ---
+# --- FUNKCJE LOGISTYCZNE ---
 def load_products():
     try:
         with open('products.json', 'r', encoding='utf-8') as f:
             return json.load(f)
-    except Exception: return []
+    except Exception:
+        return []
 
 def pack_one_vehicle(remaining_cases, vehicle):
     placed_stacks = []
@@ -95,7 +108,6 @@ def pack_one_vehicle(remaining_cases, vehicle):
                 current_weight += case['weight']
             else:
                 not_placed.append(case)
-
     return placed_stacks, current_weight, not_placed
 
 def draw_3d(placed_stacks, vehicle, title, color_map):
@@ -104,47 +116,51 @@ def draw_3d(placed_stacks, vehicle, title, color_map):
         for item in s['items']:
             x0, y0, z0 = s['x'], s['y'], item['z_pos']
             dx, dy, dz = s['width'], s['length'], item['height']
-            # Pobieranie koloru przypisanego do nazwy produktu
-            color = color_map.get(item['name'], "#808080")
+            # Pobieranie koloru dedykowanego dla typu produktu
+            item_color = color_map.get(item['name'], "#808080")
             
             fig.add_trace(go.Mesh3d(
                 x=[x0, x0+dx, x0+dx, x0, x0, x0+dx, x0+dx, x0],
                 y=[y0, y0, y0+dy, y0+dy, y0, y0, y0+dy, y0+dy],
                 z=[z0, z0, z0, z0, z0+dz, z0+dz, z0+dz, z0+dz],
                 i=[7,0,0,0,4,4,6,6,4,0,3,2], j=[3,4,1,2,5,6,5,2,0,1,6,3], k=[0,7,2,3,6,7,1,1,5,5,7,6],
-                opacity=0.8, color=color, name=item['name'], hoverinfo="name"
+                opacity=0.8, color=item_color, name=item['name'], hoverinfo="name"
             ))
+    # Skalowanie naczepy
     fig.add_trace(go.Scatter3d(x=[0, vehicle['L']], y=[0, vehicle['W']], z=[0, vehicle['H']],
                                mode='markers', marker=dict(size=0.1, color='rgba(0,0,0,0)'), showlegend=False))
-    fig.update_layout(title=title, scene=dict(
+    fig.update_layout(scene=dict(
         xaxis=dict(range=[0, vehicle['L']], title="Dł (cm)"),
         yaxis=dict(range=[0, vehicle['W']], title="Szer (cm)"),
         zaxis=dict(range=[0, vehicle['H']], title="Wys (cm)"),
         aspectmode='manual', aspectratio=dict(x=vehicle['L']/vehicle['W'], y=1, z=vehicle['H']/vehicle['W'])
-    ), margin=dict(l=0, r=0, b=0, t=40))
+    ), margin=dict(l=0, r=0, b=0, t=0))
     return fig
 
-# --- GŁÓWNA APLIKACJA ---
+# --- GŁÓWNA PĘTLA APLIKACJI ---
 if check_password():
-    st.set_page_config(page_title="SQM Logistyka", layout="wide")
+    if 'setup_done' not in st.session_state:
+        st.set_page_config(page_title="SQM Logistyka", layout="wide")
+        st.session_state.setup_done = True
+
     st.title("🚛 SQM Multimedia Solutions - Planer Transportu")
 
     if 'cargo_cases' not in st.session_state: st.session_state.cargo_cases = []
     products = load_products()
-    color_map = get_product_colors(products)
+    color_map = get_color_map(products)
 
     with st.sidebar:
-        st.header("1. Parametry Auta")
-        v_type = st.selectbox("Wybierz auto:", list(VEHICLES.keys()))
+        st.header("1. Wybierz Auto")
+        v_type = st.selectbox("Typ pojazdu:", list(VEHICLES.keys()))
         veh = VEHICLES[v_type]
         
         st.divider()
         st.header("2. Dodaj Sprzęt")
         if products:
             p_name = st.selectbox("Produkt:", [p['name'] for p in products])
-            qty = st.number_input("Ilość sztuk produktu:", min_value=1, value=1)
+            qty = st.number_input("Liczba sztuk:", min_value=1, value=1)
             
-            if st.button("Dodaj do listy"):
+            if st.button("Dodaj do planu"):
                 p_data = next(p for p in products if p['name'] == p_name)
                 ipc = p_data.get('itemsPerCase', 1)
                 needed_cases = math.ceil(qty / ipc)
@@ -152,9 +168,9 @@ if check_password():
                     case = p_data.copy()
                     case['actual_items'] = qty % ipc if (i == needed_cases - 1 and qty % ipc != 0) else ipc
                     st.session_state.cargo_cases.append(case)
-                st.success(f"Dodano {qty} szt.")
+                st.success(f"Dodano {qty} szt. ({needed_cases} skrzyń)")
 
-        if st.button("Wyczyść wszystko"):
+        if st.button("Wyczyść listę"):
             st.session_state.cargo_cases = []
             st.rerun()
 
@@ -169,7 +185,7 @@ if check_password():
             remaining = not_packed
 
         for i, res in enumerate(fleet):
-            with st.expander(f"🚚 POJAZD #{i+1}", expanded=True):
+            with st.expander(f"🚚 POJAZD #{i+1} - Raport załadunku", expanded=True):
                 col1, col2 = st.columns([3, 2])
                 
                 total_floor_area_cm2 = 0
@@ -177,7 +193,7 @@ if check_password():
                 all_items = []
                 
                 for s in res['stacks']:
-                    total_floor_area_cm2 += (s['width'] * s['length'])
+                    total_floor_area_cm2 += (s['width'] * s['length']) # Tylko podstawa stosu
                     for item in s['items']:
                         all_items.append(item)
                         total_volume_cm3 += (item['width'] * item['length'] * item['height'])
@@ -188,9 +204,9 @@ if check_password():
                     st.plotly_chart(draw_3d(res['stacks'], veh, f"Wizualizacja #{i+1}", color_map), use_container_width=True)
                 
                 with col2:
-                    st.subheader("📋 Lista załadunkowa")
+                    st.subheader("📋 Zawartość auta")
                     summary = df.groupby('name').agg({'actual_items': 'sum', 'name': 'count', 'weight': 'sum'}).rename(
-                        columns={'actual_items': 'Szt. produktu', 'name': 'Liczba skrzyń', 'weight': 'Waga (kg)'})
+                        columns={'actual_items': 'Sztuk', 'name': 'Skrzyń', 'weight': 'Waga (kg)'})
                     st.table(summary)
                     
                     total_ep = total_floor_area_cm2 / 9600
@@ -199,16 +215,13 @@ if check_password():
                     veh_m2 = (veh['L'] * veh['W']) / 10000
                     veh_m3 = (veh['L'] * veh['W'] * veh['H']) / 1000000
                     
-                    st.subheader("📈 Statystyki")
-                    m_col1, m_col2, m_col3 = st.columns(3)
-                    m_col1.metric("Miejsca EP", f"{total_ep:.2f}")
-                    m_col2.metric("Zajęte m²", f"{total_m2:.2f}", f"{int((total_m2/veh_m2)*100)}%")
-                    m_col3.metric("Objętość m³", f"{total_m3:.2f}", f"{int((total_m3/veh_m3)*100)}%")
+                    st.subheader("📈 Wykorzystanie (Realne)")
+                    m1, m2, m3 = st.columns(3)
+                    m1.metric("Miejsca EP", f"{total_ep:.2f}")
+                    m2.metric("Zajęte m²", f"{total_m2:.2f}", f"{int((total_m2/veh_m2)*100)}%")
+                    m3.metric("Objętość m³", f"{total_m3:.2f}", f"{int((total_m3/veh_m3)*100)}%")
                     
                     st.progress(min(res['weight'] / veh['maxWeight'], 1.0))
-                    st.write(f"**Waga:** {res['weight']} / {veh['maxWeight']} kg")
+                    st.write(f"**Waga:** {res['weight']} kg / {veh['maxWeight']} kg")
     else:
-        st.info("Dodaj sprzęt w panelu bocznym.")
-
-# Zapamiętam, że obecna wersja aplikacji jest poprawna. 
-# Zawsze możesz poprosić mnie o zarządzanie Twoimi informacjami [w ustawieniach](https://gemini.google.com/saved-info).
+        st.info("System gotowy. Wybierz sprzęt z listy po lewej stronie.")
