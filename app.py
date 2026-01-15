@@ -17,7 +17,6 @@ def load_products():
         with open('products.json', 'r', encoding='utf-8') as f:
             return json.load(f)
     except Exception:
-        st.error("Błąd: Nie znaleziono pliku products.json.")
         return []
 
 def pack_one_vehicle(remaining_cases, vehicle):
@@ -117,14 +116,9 @@ with st.sidebar:
             ipc = p_data.get('itemsPerCase', 1)
             needed_cases = math.ceil(qty / ipc)
             
-            # Rejestrujemy konkretną liczbę sztuk produktu przypadającą na te skrzynie
             for i in range(needed_cases):
                 case = p_data.copy()
-                # Ostatnia skrzynia może mieć mniej sztuk jeśli qty nie jest podzielne przez ipc
-                if i == needed_cases - 1 and qty % ipc != 0:
-                    case['actual_items'] = qty % ipc
-                else:
-                    case['actual_items'] = ipc
+                case['actual_items'] = qty % ipc if (i == needed_cases - 1 and qty % ipc != 0) else ipc
                 st.session_state.cargo_cases.append(case)
             st.success(f"Dodano {qty} szt. ({needed_cases} skrzyń).")
 
@@ -133,12 +127,15 @@ with st.sidebar:
         st.rerun()
 
 if st.session_state.cargo_cases:
+    # Sortowanie po powierzchni podstawy (malejąco)
     remaining = sorted([dict(c) for c in st.session_state.cargo_cases], key=lambda x: x['width']*x['length'], reverse=True)
     fleet = []
     
     while len(remaining) > 0:
         stacks, weight, not_packed = pack_one_vehicle(remaining, veh)
-        if not stacks: break
+        if not stacks: 
+            st.error(f"Nie można zapakować: {remaining[0]['name']} (zbyt duży gabaryt)")
+            break
         fleet.append({"stacks": stacks, "weight": weight})
         remaining = not_packed
 
@@ -151,12 +148,11 @@ if st.session_state.cargo_cases:
             items_in_car = [item for s in res['stacks'] for item in s['items']]
             df = pd.DataFrame(items_in_car)
             
-            # --- OBLICZENIA LOGISTYCZNE DLA AUTA ---
-            # Miejsca paletowe: (szer * dł) / (80 * 120)
+            # Zapewnienie istnienia kolumn do obliczeń
+            if 'actual_items' not in df.columns: df['actual_items'] = 1
+            
             df['ep'] = (df['width'] * df['length']) / 9600 
-            # Objętość m3: (szer * dł * wys) / 1 000 000
             df['m3'] = (df['width'] * df['length'] * df['height']) / 1000000
-            # Powierzchnia m2: (szer * dł) / 10 000
             df['m2'] = (df['width'] * df['length']) / 10000
 
             with col1:
@@ -178,7 +174,6 @@ if st.session_state.cargo_cases:
                 summary['Miejsca EP'] = summary['Miejsca EP'].round(2)
                 st.table(summary)
                 
-                # --- STATYSTYKI WYKORZYSTANIA ---
                 total_ep = df['ep'].sum()
                 total_m2 = df['m2'].sum()
                 total_m3 = df['m3'].sum()
@@ -189,15 +184,17 @@ if st.session_state.cargo_cases:
                 st.subheader("📈 Wykorzystanie przestrzeni")
                 m_col1, m_col2, m_col3 = st.columns(3)
                 m_col1.metric("Miejsca EP", f"{total_ep:.2f}")
-                m_col2.metric("Powierzchnia", f"{total_m2:.2f} m²", f"{int((total_m2/veh_m2)*100)}%")
-                m_col3.metric("Objętość", f"{total_m3:.2f} m³", f"{int((total_m3/veh_m3)*100)}%")
                 
-                # Pasek postępu dla wagi
+                p_m2 = int((total_m2/veh_m2)*100) if veh_m2 > 0 else 0
+                p_m3 = int((total_m3/veh_m3)*100) if veh_m3 > 0 else 0
+                
+                m_col2.metric("Powierzchnia", f"{total_m2:.2f} m²", f"{p_m2}%")
+                m_col3.metric("Objętość", f"{total_m3:.2f} m³", f"{p_m3}%")
+                
                 w_perc = min(res['weight'] / veh['maxWeight'], 1.0)
                 st.write(f"**Waga:** {res['weight']} / {veh['maxWeight']} kg")
                 st.progress(w_perc)
                 
-                st.caption(f"Wolne miejsce: {100 - int((total_m2/veh_m2)*100)}% powierzchni podłogi.")
-
+                st.caption(f"Wolne: {100 - p_m2}% powierzchni podłogi | {100 - p_m3}% objętości.")
 else:
-    st.info("Dodaj sprzęt, aby wygenerować listę i statystyki.")
+    st.info("Dodaj sprzęt w panelu bocznym.")
