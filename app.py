@@ -3,6 +3,26 @@ import json
 import plotly.graph_objects as go
 import math
 import pandas as pd
+import hashlib
+
+# --- KONFIGURACJA I ZABEZPIECZENIA ---
+PASSWORD_HASH = "711116a4d0f9ccf33c545ec650b11676d18c1440" # Domyślne: "admin123" (SHA1)
+
+def check_password():
+    if "authenticated" not in st.session_state:
+        st.session_state.authenticated = False
+    
+    if not st.session_state.authenticated:
+        st.title("🔐 Logowanie - SQM Logistyka")
+        pwd = st.text_input("Podaj hasło dostępu:", type="password")
+        if st.button("Zaloguj"):
+            if hashlib.sha1(pwd.encode()).hexdigest() == PASSWORD_HASH:
+                st.session_state.authenticated = True
+                st.rerun()
+            else:
+                st.error("Nieprawidłowe hasło.")
+        return False
+    return True
 
 # --- KONFIGURACJA POJAZDÓW ---
 VEHICLES = {
@@ -12,12 +32,21 @@ VEHICLES = {
     "FTL": {"maxWeight": 12000, "L": 1360, "W": 245, "H": 265}
 }
 
+# --- PALETA KOLORÓW DLA PRODUKTÓW ---
+COLORS = [
+    "#4682B4", "#A52A2A", "#2E8B57", "#DAA520", "#6A5ACD", 
+    "#FF4500", "#20B2AA", "#800080", "#556B2F", "#D2691E"
+]
+
+def get_product_colors(products):
+    return {p['name']: COLORS[i % len(COLORS)] for i, p in enumerate(products)}
+
+# --- LOGIKA PAKOWANIA (Bez zmian) ---
 def load_products():
     try:
         with open('products.json', 'r', encoding='utf-8') as f:
             return json.load(f)
-    except Exception:
-        return []
+    except Exception: return []
 
 def pack_one_vehicle(remaining_cases, vehicle):
     placed_stacks = []
@@ -69,13 +98,15 @@ def pack_one_vehicle(remaining_cases, vehicle):
 
     return placed_stacks, current_weight, not_placed
 
-def draw_3d(placed_stacks, vehicle, title):
+def draw_3d(placed_stacks, vehicle, title, color_map):
     fig = go.Figure()
     for s in placed_stacks:
         for item in s['items']:
             x0, y0, z0 = s['x'], s['y'], item['z_pos']
             dx, dy, dz = s['width'], s['length'], item['height']
-            color = "#4682B4" if item.get('canStack') else "#A52A2A"
+            # Pobieranie koloru przypisanego do nazwy produktu
+            color = color_map.get(item['name'], "#808080")
+            
             fig.add_trace(go.Mesh3d(
                 x=[x0, x0+dx, x0+dx, x0, x0, x0+dx, x0+dx, x0],
                 y=[y0, y0, y0+dy, y0+dy, y0, y0, y0+dy, y0+dy],
@@ -93,106 +124,91 @@ def draw_3d(placed_stacks, vehicle, title):
     ), margin=dict(l=0, r=0, b=0, t=40))
     return fig
 
-# --- STREAMLIT ---
-st.set_page_config(page_title="SQM Logistyka", layout="wide")
-st.title("🚛 SQM Multimedia Solutions - Planer Transportu")
+# --- GŁÓWNA APLIKACJA ---
+if check_password():
+    st.set_page_config(page_title="SQM Logistyka", layout="wide")
+    st.title("🚛 SQM Multimedia Solutions - Planer Transportu")
 
-if 'cargo_cases' not in st.session_state: st.session_state.cargo_cases = []
-products = load_products()
+    if 'cargo_cases' not in st.session_state: st.session_state.cargo_cases = []
+    products = load_products()
+    color_map = get_product_colors(products)
 
-with st.sidebar:
-    st.header("1. Parametry Auta")
-    v_type = st.selectbox("Wybierz auto:", list(VEHICLES.keys()))
-    veh = VEHICLES[v_type]
-    
-    st.divider()
-    st.header("2. Dodaj Sprzęt")
-    if products:
-        p_name = st.selectbox("Produkt:", [p['name'] for p in products])
-        qty = st.number_input("Ilość sztuk produktu:", min_value=1, value=1)
+    with st.sidebar:
+        st.header("1. Parametry Auta")
+        v_type = st.selectbox("Wybierz auto:", list(VEHICLES.keys()))
+        veh = VEHICLES[v_type]
         
-        if st.button("Dodaj do listy"):
-            p_data = next(p for p in products if p['name'] == p_name)
-            ipc = p_data.get('itemsPerCase', 1)
-            needed_cases = math.ceil(qty / ipc)
-            for i in range(needed_cases):
-                case = p_data.copy()
-                case['actual_items'] = qty % ipc if (i == needed_cases - 1 and qty % ipc != 0) else ipc
-                st.session_state.cargo_cases.append(case)
-            st.success(f"Dodano {qty} szt. ({needed_cases} skrzyń).")
-
-    if st.button("Wyczyść wszystko"):
-        st.session_state.cargo_cases = []
-        st.rerun()
-
-if st.session_state.cargo_cases:
-    remaining = sorted([dict(c) for c in st.session_state.cargo_cases], key=lambda x: x['width']*x['length'], reverse=True)
-    fleet = []
-    
-    while len(remaining) > 0:
-        stacks, weight, not_packed = pack_one_vehicle(remaining, veh)
-        if not stacks: break
-        fleet.append({"stacks": stacks, "weight": weight})
-        remaining = not_packed
-
-    for i, res in enumerate(fleet):
-        with st.expander(f"🚚 POJAZD #{i+1}", expanded=True):
-            col1, col2 = st.columns([3, 2])
+        st.divider()
+        st.header("2. Dodaj Sprzęt")
+        if products:
+            p_name = st.selectbox("Produkt:", [p['name'] for p in products])
+            qty = st.number_input("Ilość sztuk produktu:", min_value=1, value=1)
             
-            # --- OBLICZENIA OPARTE O STOSY (FLOOR AREA) ---
-            total_floor_area_cm2 = 0
-            total_volume_cm3 = 0
-            all_items = []
-            
-            for s in res['stacks']:
-                # Powierzchnia podstawy stosu (tylko raz na stos!)
-                total_floor_area_cm2 += (s['width'] * s['length'])
-                for item in s['items']:
-                    all_items.append(item)
-                    # Objętość liczymy dla każdego elementu w stosie
-                    total_volume_cm3 += (item['width'] * item['length'] * item['height'])
+            if st.button("Dodaj do listy"):
+                p_data = next(p for p in products if p['name'] == p_name)
+                ipc = p_data.get('itemsPerCase', 1)
+                needed_cases = math.ceil(qty / ipc)
+                for i in range(needed_cases):
+                    case = p_data.copy()
+                    case['actual_items'] = qty % ipc if (i == needed_cases - 1 and qty % ipc != 0) else ipc
+                    st.session_state.cargo_cases.append(case)
+                st.success(f"Dodano {qty} szt.")
 
-            df = pd.DataFrame(all_items)
-            
-            with col1:
-                st.plotly_chart(draw_3d(res['stacks'], veh, f"Wizualizacja #{i+1}"), use_container_width=True)
-            
-            with col2:
-                st.subheader("📋 Lista załadunkowa")
-                # Tabela zlicza wszystkie sztuki, ale EP policzymy osobno z powierzchni podłogi
-                summary = df.groupby('name').agg({
-                    'actual_items': 'sum',
-                    'name': 'count',
-                    'weight': 'sum'
-                }).rename(columns={
-                    'actual_items': 'Szt. produktu',
-                    'name': 'Liczba skrzyń',
-                    'weight': 'Waga (kg)'
-                })
-                st.table(summary)
-                
-                # --- STATYSTYKI WYKORZYSTANIA ---
-                total_ep = total_floor_area_cm2 / 9600
-                total_m2 = total_floor_area_cm2 / 10000
-                total_m3 = total_volume_cm3 / 1000000
-                
-                veh_m2 = (veh['L'] * veh['W']) / 10000
-                veh_m3 = (veh['L'] * veh['W'] * veh['H']) / 1000000
-                
-                st.subheader("📈 Wykorzystanie podłogi (Realne)")
-                m_col1, m_col2, m_col3 = st.columns(3)
-                m_col1.metric("Miejsca EP", f"{total_ep:.2f}")
-                
-                p_m2 = int((total_m2/veh_m2)*100) if veh_m2 > 0 else 0
-                p_m3 = int((total_m3/veh_m3)*100) if veh_m3 > 0 else 0
-                
-                m_col2.metric("Zajęte m²", f"{total_m2:.2f}", f"{p_m2}%")
-                m_col3.metric("Objętość m³", f"{total_m3:.2f}", f"{p_m3}%")
-                
-                st.progress(min(res['weight'] / veh['maxWeight'], 1.0))
-                st.write(f"**Waga:** {res['weight']} / {veh['maxWeight']} kg")
-                
-                st.info(f"Dzięki układaniu w stosy oszczędzasz miejsce. Zajęte {p_m2}% podłogi.")
+        if st.button("Wyczyść wszystko"):
+            st.session_state.cargo_cases = []
+            st.rerun()
 
-else:
-    st.info("Dodaj sprzęt w panelu bocznym.")
+    if st.session_state.cargo_cases:
+        remaining = sorted([dict(c) for c in st.session_state.cargo_cases], key=lambda x: x['width']*x['length'], reverse=True)
+        fleet = []
+        
+        while len(remaining) > 0:
+            stacks, weight, not_packed = pack_one_vehicle(remaining, veh)
+            if not stacks: break
+            fleet.append({"stacks": stacks, "weight": weight})
+            remaining = not_packed
+
+        for i, res in enumerate(fleet):
+            with st.expander(f"🚚 POJAZD #{i+1}", expanded=True):
+                col1, col2 = st.columns([3, 2])
+                
+                total_floor_area_cm2 = 0
+                total_volume_cm3 = 0
+                all_items = []
+                
+                for s in res['stacks']:
+                    total_floor_area_cm2 += (s['width'] * s['length'])
+                    for item in s['items']:
+                        all_items.append(item)
+                        total_volume_cm3 += (item['width'] * item['length'] * item['height'])
+
+                df = pd.DataFrame(all_items)
+                
+                with col1:
+                    st.plotly_chart(draw_3d(res['stacks'], veh, f"Wizualizacja #{i+1}", color_map), use_container_width=True)
+                
+                with col2:
+                    st.subheader("📋 Lista załadunkowa")
+                    summary = df.groupby('name').agg({'actual_items': 'sum', 'name': 'count', 'weight': 'sum'}).rename(
+                        columns={'actual_items': 'Szt. produktu', 'name': 'Liczba skrzyń', 'weight': 'Waga (kg)'})
+                    st.table(summary)
+                    
+                    total_ep = total_floor_area_cm2 / 9600
+                    total_m2 = total_floor_area_cm2 / 10000
+                    total_m3 = total_volume_cm3 / 1000000
+                    veh_m2 = (veh['L'] * veh['W']) / 10000
+                    veh_m3 = (veh['L'] * veh['W'] * veh['H']) / 1000000
+                    
+                    st.subheader("📈 Statystyki")
+                    m_col1, m_col2, m_col3 = st.columns(3)
+                    m_col1.metric("Miejsca EP", f"{total_ep:.2f}")
+                    m_col2.metric("Zajęte m²", f"{total_m2:.2f}", f"{int((total_m2/veh_m2)*100)}%")
+                    m_col3.metric("Objętość m³", f"{total_m3:.2f}", f"{int((total_m3/veh_m3)*100)}%")
+                    
+                    st.progress(min(res['weight'] / veh['maxWeight'], 1.0))
+                    st.write(f"**Waga:** {res['weight']} / {veh['maxWeight']} kg")
+    else:
+        st.info("Dodaj sprzęt w panelu bocznym.")
+
+# Zapamiętam, że obecna wersja aplikacji jest poprawna. 
+# Zawsze możesz poprosić mnie o zarządzanie Twoimi informacjami [w ustawieniach](https://gemini.google.com/saved-info).
