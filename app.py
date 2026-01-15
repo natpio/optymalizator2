@@ -15,6 +15,7 @@ def check_password():
         st.subheader("Planer Transportu")
         
         try:
+            # Hasło pobierane ze Streamlit Secrets
             master_password = str(st.secrets["password"])
         except Exception:
             st.error("🔒 Brak konfiguracji hasła głównego w Streamlit Secrets.")
@@ -35,7 +36,7 @@ VEHICLES = {
     "BUS": {"maxWeight": 1100, "L": 450, "W": 150, "H": 245},
     "6m": {"maxWeight": 3500, "L": 600, "W": 245, "H": 245},
     "7m": {"maxWeight": 3500, "L": 700, "W": 245, "H": 245},
-    "FTL": {"maxWeight": 12000, "L": 1360, "W": 245, "H": 265}
+    "FTL": {"maxWeight": 24000, "L": 1360, "W": 245, "H": 265}
 }
 
 COLOR_PALETTE = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"]
@@ -44,7 +45,8 @@ def load_products():
     try:
         with open('products.json', 'r', encoding='utf-8') as f:
             return sorted(json.load(f), key=lambda x: x['name'])
-    except: return []
+    except:
+        return []
 
 # --- 3. LOGIKA PAKOWANIA ---
 def pack_one_vehicle(remaining_cases, vehicle):
@@ -58,6 +60,7 @@ def pack_one_vehicle(remaining_cases, vehicle):
             continue
 
         added = False
+        # Logika "mieszania": szuka stosu o identycznych wymiarach podstawy
         if case.get('canStack', True):
             for s in placed_stacks:
                 if (s['canStackBase'] and case['width'] == s['width'] and 
@@ -119,7 +122,8 @@ if check_password():
         st.session_state.setup = True
 
     st.title("🚛 Logistics Department: Planer Transportu")
-    if 'cargo' not in st.session_state: st.session_state.cargo = []
+    if 'cargo' not in st.session_state: 
+        st.session_state.cargo = []
     
     prods = load_products()
     if 'color_map' not in st.session_state:
@@ -129,25 +133,46 @@ if check_password():
         st.header("1. Pojazd")
         v_name = st.selectbox("Wybierz auto:", list(VEHICLES.keys()))
         veh = VEHICLES[v_name]
+        
         st.divider()
-        st.header("2. Sprzęt")
-        selected_p = st.selectbox("Produkt:", [p['name'] for p in prods], index=None, placeholder="Szukaj...")
+        st.header("2. Dodaj Sprzęt")
+        selected_p = st.selectbox("Produkt:", [p['name'] for p in prods], index=None, placeholder="Szukaj produktu...")
         qty = st.number_input("Sztuk:", min_value=1, value=1)
         
         if st.button("Dodaj do planu", use_container_width=True) and selected_p:
             p_data = next(p for p in prods if p['name'] == selected_p)
             ipc = p_data.get('itemsPerCase', 1)
-            for i in range(math.ceil(qty/ipc)):
+            num_cases = math.ceil(qty / ipc)
+            for i in range(num_cases):
                 c = p_data.copy()
-                c['actual_items'] = qty % ipc if (i == math.ceil(qty/ipc)-1 and qty % ipc != 0) else ipc
+                # Obliczanie faktycznej ilości sztuk w ostatniej skrzyni
+                if i == num_cases - 1 and qty % ipc != 0:
+                    c['actual_items'] = qty % ipc
+                else:
+                    c['actual_items'] = ipc
                 st.session_state.cargo.append(c)
-            st.success(f"Dodano: {selected_p}")
-        
-        if st.button("Wyczyść wszystko", use_container_width=True):
-            st.session_state.cargo = []
             st.rerun()
 
+        st.divider()
+        st.header("3. Lista Załadunkowa")
+        if st.session_state.cargo:
+            # Wyświetlanie listy z opcją usuwania
+            for idx, item in enumerate(st.session_state.cargo):
+                col_name, col_del = st.columns([4, 1])
+                col_name.write(f"{idx+1}. {item['name']}")
+                if col_del.button("❌", key=f"del_{idx}"):
+                    st.session_state.cargo.pop(idx)
+                    st.rerun()
+            
+            if st.button("Wyczyść wszystko", use_container_width=True, type="secondary"):
+                st.session_state.cargo = []
+                st.rerun()
+        else:
+            st.info("Lista jest pusta.")
+
+    # --- WIZUALIZACJA I STATYSTYKI ---
     if st.session_state.cargo:
+        # Sortowanie dla optymalnego pakowania (od największej podstawy)
         rem = sorted([dict(c) for c in st.session_state.cargo], key=lambda x: x['width']*x['length'], reverse=True)
         fleet = []
         while rem:
@@ -160,34 +185,39 @@ if check_password():
             with st.expander(f"🚚 POJAZD #{i+1}", expanded=True):
                 c1, c2 = st.columns([3, 2])
                 
-                # OBLICZENIA STATYSTYCZNE
-                floor_cm2 = sum(s['width']*s['length'] for s in res['stacks'])
-                vol_cm3 = sum(item['width']*item['length']*item['height'] for s in res['stacks'] for item in s['items'])
+                # Przygotowanie danych do tabeli
+                all_items_in_veh = [item for s in res['stacks'] for item in s['items']]
+                df = pd.DataFrame(all_items_in_veh)
                 
+                floor_cm2 = sum(s['width']*s['length'] for s in res['stacks'])
+                vol_cm3 = sum(item['width']*item['length']*item['height'] for item in all_items_in_veh)
                 veh_floor_cm2 = veh['L'] * veh['W']
                 veh_vol_cm3 = veh['L'] * veh['W'] * veh['H']
-                
-                all_i = [item for s in res['stacks'] for item in s['items']]
-                df = pd.DataFrame(all_i)
 
                 with c1:
-                    st.plotly_chart(draw_3d(res['stacks'], veh, st.session_state.color_map), use_container_width=True, key=f"v_{i}_{len(st.session_state.cargo)}")
+                    st.plotly_chart(draw_3d(res['stacks'], veh, st.session_state.color_map), use_container_width=True, key=f"v_{i}")
                 
                 with c2:
                     st.subheader("📋 Specyfikacja")
-                    summ = df.groupby('name').agg({'actual_items':'sum', 'name':'count', 'weight':'sum'}).rename(
-                        columns={'actual_items':'Sztuk sprzętu', 'name':'Liczba skrzyń', 'weight':'Waga (kg)'})
-                    st.table(summ)
+                    summ = df.groupby('name').agg({
+                        'actual_items': 'sum', 
+                        'name': 'count', 
+                        'weight': 'sum'
+                    }).rename(columns={
+                        'actual_items': 'Sztuk sprzętu', 
+                        'name': 'Liczba skrzyń', 
+                        'weight': 'Waga (kg)'
+                    })
+                    # Użycie dataframe zamiast table, aby uniknąć ucinania listy
+                    st.dataframe(summ, use_container_width=True)
                     
                     st.subheader("📈 Wykorzystanie")
                     m1, m2, m3 = st.columns(3)
                     m1.metric("Miejsca EP", f"{floor_cm2/9600:.2f}")
-                    # Procent powierzchni
-                    m2.metric("Powierzchnia m²", f"{floor_cm2/10000:.2f}", f"{int((floor_cm2/veh_floor_cm2)*100)}%")
-                    # DODANO: Procent objętości
-                    m3.metric("Objętość m³", f"{vol_cm3/1000000:.2f}", f"{int((vol_cm3/veh_vol_cm3)*100)}%")
+                    m2.metric("Powierzchnia", f"{floor_cm2/10000:.2f} m²", f"{int((floor_cm2/veh_floor_cm2)*100)}%")
+                    m3.metric("Objętość", f"{vol_cm3/1000000:.2f} m³", f"{int((vol_cm3/veh_vol_cm3)*100)}%")
                     
+                    st.write(f"**Waga ładunku:** {res['weight']} / {veh['maxWeight']} kg")
                     st.progress(min(res['weight'] / veh['maxWeight'], 1.0))
-                    st.write(f"**Waga:** {res['weight']} / {veh['maxWeight']} kg")
     else:
-        st.info("Dodaj produkty, aby zobaczyć wizualizację i statystyki.")
+        st.info("Dodaj produkty z panelu po lewej stronie, aby rozpocząć planowanie.")
