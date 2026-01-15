@@ -30,12 +30,12 @@ def check_password():
         return False
     return True
 
-# --- 2. KONFIGURACJA POJAZDÓW (Poprawiona na realne wartości) ---
+# --- 2. KONFIGURACJA POJAZDÓW (DOKŁADNIE TWOJE WYMIARY) ---
 VEHICLES = {
-    "BUS": {"maxWeight": 1100, "L": 450, "W": 170, "H": 245}, # Szerokość poprawiona z 150 na 170
+    "BUS": {"maxWeight": 1100, "L": 450, "W": 150, "H": 245},
     "6m": {"maxWeight": 3500, "L": 600, "W": 245, "H": 245},
     "7m": {"maxWeight": 3500, "L": 700, "W": 245, "H": 245},
-    "FTL": {"maxWeight": 24000, "L": 1360, "W": 245, "H": 265} # Waga poprawiona z 12t na 24t
+    "FTL": {"maxWeight": 12000, "L": 1360, "W": 245, "H": 265}
 }
 
 COLOR_PALETTE = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"]
@@ -121,7 +121,6 @@ if check_password():
 
     st.title("🚛 Logistics Department: Planer Transportu")
     
-    # Przechowywanie danych jako DataFrame dla łatwiejszej edycji
     if 'cargo_df' not in st.session_state:
         st.session_state.cargo_df = pd.DataFrame(columns=['name', 'qty', 'width', 'length', 'height', 'weight', 'itemsPerCase', 'canStack'])
     
@@ -135,21 +134,16 @@ if check_password():
         veh = VEHICLES[v_name]
         
         st.divider()
-        st.header("2. Dodaj do listy")
-        selected_p = st.selectbox("Produkt:", [p['name'] for p in prods], index=None, placeholder="Wybierz sprzęt...")
+        st.header("2. Dodaj Sprzęt")
+        selected_p = st.selectbox("Produkt:", [p['name'] for p in prods], index=None, placeholder="Szukaj...")
         add_qty = st.number_input("Sztuk:", min_value=1, value=1)
         
         if st.button("➕ Dodaj do zamówienia", use_container_width=True) and selected_p:
             p_data = next(p for p in prods if p['name'] == selected_p)
             new_row = {
-                'name': p_data['name'],
-                'qty': add_qty,
-                'width': p_data['width'],
-                'length': p_data['length'],
-                'height': p_data['height'],
-                'weight': p_data['weight'],
-                'itemsPerCase': p_data.get('itemsPerCase', 1),
-                'canStack': p_data.get('canStack', True)
+                'name': p_data['name'], 'qty': add_qty, 'width': p_data['width'],
+                'length': p_data['length'], 'height': p_data['height'], 'weight': p_data['weight'],
+                'itemsPerCase': p_data.get('itemsPerCase', 1), 'canStack': p_data.get('canStack', True)
             }
             st.session_state.cargo_df = pd.concat([st.session_state.cargo_df, pd.DataFrame([new_row])], ignore_index=True)
             st.rerun()
@@ -160,32 +154,30 @@ if check_password():
 
     # --- EDYCJA I WIZUALIZACJA ---
     if not st.session_state.cargo_df.empty:
-        st.subheader("📝 Aktywne zamówienie (możesz edytować ilości bezpośrednio w tabeli)")
-        # Edytowalna tabela
+        st.subheader("📝 Aktywne zamówienie (edytuj ilości w tabeli poniżej)")
+        # Edytowalna tabela zamówienia
         edited_df = st.data_editor(
             st.session_state.cargo_df,
             num_rows="dynamic",
             use_container_width=True,
             column_config={
                 "qty": st.column_config.NumberColumn("Sztuk", min_value=1, step=1),
-                "name": "Nazwa produktu",
+                "name": "Produkt",
                 "width": "Szer (cm)", "length": "Dł (cm)", "height": "Wys (cm)", "weight": "Waga (kg/case)"
             },
             key="main_editor"
         )
         st.session_state.cargo_df = edited_df
 
-        # Przetworzenie DataFrame na listę skrzyń do algorytmu
+        # Przetworzenie danych na listę skrzyń
         cargo_to_pack = []
         for _, row in edited_df.iterrows():
+            if row['qty'] <= 0: continue
             ipc = row['itemsPerCase']
             num_cases = math.ceil(row['qty'] / ipc)
             for i in range(num_cases):
                 case_item = row.to_dict()
-                if i == num_cases - 1 and row['qty'] % ipc != 0:
-                    case_item['actual_items'] = row['qty'] % ipc
-                else:
-                    case_item['actual_items'] = ipc
+                case_item['actual_items'] = row['qty'] % ipc if (i == num_cases - 1 and row['qty'] % ipc != 0) else ipc
                 cargo_to_pack.append(case_item)
 
         # Algorytm pakowania
@@ -197,30 +189,26 @@ if check_password():
             fleet.append({"stacks": s, "weight": w})
             rem = n
 
-        # Wyświetlanie pojazdów
+        # Wyświetlanie wyników
         for i, res in enumerate(fleet):
             with st.expander(f"🚚 POJAZD #{i+1} - {v_name}", expanded=True):
                 c1, c2 = st.columns([3, 2])
                 all_items = [item for s in res['stacks'] for item in s['items']]
-                df_res = pd.DataFrame(all_items)
-
+                
                 with c1:
-                    st.plotly_chart(draw_3d(res['stacks'], veh, st.session_state.color_map), use_container_width=True, key=f"plot_{i}")
+                    st.plotly_chart(draw_3d(res['stacks'], veh, st.session_state.color_map), use_container_width=True, key=f"v_{i}")
                 
                 with c2:
-                    st.subheader("📊 Wykorzystanie")
+                    st.subheader("📊 Statystyki")
                     floor_cm2 = sum(s['width']*s['length'] for s in res['stacks'])
-                    vol_cm3 = sum(item['width']*item['length']*item['height'] for item in all_items)
-                    
                     m1, m2 = st.columns(2)
-                    m1.metric("Powierzchnia", f"{floor_cm2/10000:.1f} m²", f"{int((floor_cm2/(veh['L']*veh['W']))*100)}%")
+                    m1.metric("Podłoga", f"{int((floor_cm2/(veh['L']*veh['W']))*100)}%")
                     m2.metric("Waga", f"{res['weight']} kg", f"{int((res['weight']/veh['maxWeight'])*100)}%")
-                    
                     st.progress(min(res['weight'] / veh['maxWeight'], 1.0))
                     
-                    st.subheader("📋 Specyfikacja załadunku")
-                    summ = df_res.groupby('name').agg({'actual_items':'sum', 'name':'count', 'weight':'sum'}).rename(
-                        columns={'actual_items':'Sztuk sprzętu', 'name':'Liczba skrzyń', 'weight':'Waga (kg)'})
+                    st.subheader("📋 Specyfikacja")
+                    summ = pd.DataFrame(all_items).groupby('name').agg({'actual_items':'sum', 'name':'count', 'weight':'sum'}).rename(
+                        columns={'actual_items':'Sztuk', 'name':'Skrzyń', 'weight':'kg'})
                     st.dataframe(summ, use_container_width=True)
     else:
-        st.info("Wybierz produkty z panelu po lewej stronie, aby rozpocząć planowanie.")
+        st.info("Dodaj produkty, aby zobaczyć wizualizację.")
