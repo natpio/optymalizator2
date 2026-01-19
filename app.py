@@ -35,7 +35,7 @@ def check_password():
 VEHICLES = {
     "BUS": {"maxWeight": 1100, "L": 450, "W": 150, "H": 245},
     "6m": {"maxWeight": 3500, "L": 600, "W": 245, "H": 245},
-    "7m": {"maxWeight": 3500, "L": 700, "W": 245, "H": 245},
+    "7m": {"maxWeight": 7000, "L": 700, "W": 245, "H": 245},
     "FTL": {"maxWeight": 12000, "L": 1360, "W": 245, "H": 265}
 }
 
