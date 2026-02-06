@@ -88,7 +88,7 @@
   {"id": 87, "name": "TRUSS x HANGED CIRCLE Ø11m", "width": 300, "length": 60, "height": 210, "weight": 200, "canStack": false, "itemsPerCase": 1},
   {"id": 88, "name": "TRUSS x HANGED CIRCLE Ø19m", "width": 320, "length": 60, "height": 230, "weight": 220, "canStack": false, "itemsPerCase": 1},
   {"id": 89, "name": "P2.06 / frameLED / KABINET", "width": 86, "length": 62, "height": 100, "weight": 118, "canStack": true, "itemsPerCase": 10},
-  {"id": 90, "name": "P1,86 LED MODULE / 320 x160MM FLEX V1", "width": 32, "length": 16, "height": 2, "weight": 0.34, "canStack": true, "itemsPerCase": 1},
+  {"id": 90, "name": "P1,86 LED MODULE / 320 x160MM FLEX V1", "width": 46, "length": 63, "height": 40, "weight": 20, "canStack": true, "itemsPerCase": 42},
   {"id": 91, "name": "P2.0 LED SPHERE / d=1,5m", "width": 160, "length": 160, "height": 220, "weight": 120, "canStack": false, "itemsPerCase": 1},
   {"id": 92, "name": "P3.0 LED SPHERE 1 z 5", "width": 192, "length": 192, "height": 200, "weight": 400, "canStack": false, "itemsPerCase": 1},
   {"id": 93, "name": "P3.0 LED SPHERE 2 z 5", "width": 192, "length": 192, "height": 200, "weight": 400, "canStack": false, "itemsPerCase": 1},
