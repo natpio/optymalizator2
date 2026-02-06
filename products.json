@@ -134,7 +134,7 @@
   {"id": 133, "name": "ALUSTAGE / AL31 / UNO TRUSS / 3", "width": 300, "length": 5, "height": 5, "weight": 6, "canStack": true, "itemsPerCase": 1},
   {"id": 134, "name": "ALUSTAGE / AL32 / DUO-290 TRUSS / 0,5M", "width": 50, "length": 5, "height": 30, "weight": 2, "canStack": true, "itemsPerCase": 1},
   {"id": 135, "name": "ALUSTAGE / AL32 / DUO-290 TRUSS / 1M", "width": 100, "length": 5, "height": 30, "weight": 3, "canStack": true, "itemsPerCase": 1},
-  {"id": 136, "name": "ALUSTAGE / AL32 / DUO-290 TRUSS / 2M", "width": 200, "length": 5, "height": 30, "weight": 5, "canStack": true, "itemsPerCase": 1}
-  {"id": 137, "name": "ALLEN & HEATH ZED 10 AUDIO ANALOG MIXER", "width": 46, "length": 33, "height": 16, "weight": 5, "canStack": true, "itemsPerCase": 1}
+  {"id": 136, "name": "ALUSTAGE / AL32 / DUO-290 TRUSS / 2M", "width": 200, "length": 5, "height": 30, "weight": 5, "canStack": true, "itemsPerCase": 1},
+  {"id": 137, "name": "ALLEN & HEATH ZED 10 AUDIO ANALOG MIXER", "width": 46, "length": 33, "height": 16, "weight": 5, "canStack": true, "itemsPerCase": 1},
   {"id": 138, "name": "SENDER - SCALER / NOVASTAR / MCTRL 4K", "width": 55, "length": 24, "height": 55, "weight": 20, "canStack": true, "itemsPerCase": 1}
 ]
