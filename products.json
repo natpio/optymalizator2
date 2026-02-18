@@ -98,8 +98,8 @@
   {"id": 97, "name": "P1.56 stackować na 2(!)", "width": 120, "length": 60, "height": 90, "weight": 125, "canStack": true, "itemsPerCase": 10},
   {"id": 98, "name": "CHAINMASTER D8PLUS (320KG)", "width": 46, "length": 22, "height": 13, "weight": 30, "canStack": true, "itemsPerCase": 1},
   {"id": 99, "name": "PODEST ALUDECK LIGHT 2 x 1M", "width": 200, "length": 100, "height": 20, "weight": 45, "canStack": true, "itemsPerCase": 1},
-  {"id": 100, "name": "ALUMINIUM BLACK PIPE / ⌀50 / 4M", "width": 400, "length": 6, "height": 6, "weight": 6, "canStack": true, "itemsPerCase": 1},
-  {"id": 101, "name": "ALUMINIUM BLACK PIPE / ⌀50 / 6M", "width": 600, "length": 6, "height": 6, "weight": 9, "canStack": true, "itemsPerCase": 1},
+  {"id": 100, "name": "ALUMINIUM BLACK PIPE / 50 / 4M", "width": 400, "length": 6, "height": 6, "weight": 6, "canStack": true, "itemsPerCase": 1},
+  {"id": 101, "name": "ALUMINIUM BLACK PIPE / 50 / 6M", "width": 600, "length": 6, "height": 6, "weight": 9, "canStack": true, "itemsPerCase": 1},
   {"id": 102, "name": "PROLIGHTS / ECLEXPO FLOOD300W / DMX-5 (Karton)", "width": 40, "length": 21, "height": 25, "weight": 5, "canStack": true, "itemsPerCase": 1},
   {"id": 103, "name": "VOGELS / PFW 6870 BLACK / SCISSOR MOUNT", "width": 29, "length": 5, "height": 6, "weight": 23, "canStack": true, "itemsPerCase": 1},
   {"id": 104, "name": "MULTIMEDIA TOTEM / 55\" / 4K / i5-12450H / 16GB / 1TB / Win10 / BLACK", "width": 100, "length": 80, "height": 200, "weight": 150, "canStack": false, "itemsPerCase": 1},
@@ -140,5 +140,5 @@
   {"id": 139, "name": "LED WASHER / 16 X 10W / RGBW / 4 IN 1", "width": 116, "length": 58, "height": 52, "weight": 20, "canStack": true, "itemsPerCase": 5},
   {"id": 140, "name": "LED LIGHT BAR / 8 PL42199", "width": 115, "length": 67, "height": 38, "weight": 40, "canStack": true, "itemsPerCase": 8},
   {"id": 141, "name": "matrixLED cabinet / 0,5x0,5m", "width": 66, "length": 104, "height": 80, "weight": 84, "canStack": true, "itemsPerCase": 4},
-  {"id": 142, "name": "P2.0 LED SPHERE / d=1,5m DOBRAC DUŻĄ SKRZYNIE", "width": 120, "length": 60, "height": 70, "weight": 150, "canStack": false, "itemsPerCase": 1},
+  {"id": 142, "name": "P2.0 LED SPHERE / d=1,5m DOBRAC DUŻĄ SKRZYNIE", "width": 120, "length": 60, "height": 70, "weight": 150, "canStack": false, "itemsPerCase": 1}
 ]
