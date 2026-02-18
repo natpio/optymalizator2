@@ -140,5 +140,5 @@
   {"id": 139, "name": "LED WASHER / 16 X 10W / RGBW / 4 IN 1", "width": 116, "length": 58, "height": 52, "weight": 20, "canStack": true, "itemsPerCase": 5},
   {"id": 140, "name": "LED LIGHT BAR / 8 PL42199", "width": 115, "length": 67, "height": 38, "weight": 40, "canStack": true, "itemsPerCase": 8},
   {"id": 141, "name": "matrixLED cabinet / 0,5x0,5m", "width": 66, "length": 104, "height": 80, "weight": 84, "canStack": true, "itemsPerCase": 4},
-  name": "P2.0 LED SPHERE / d=1,5m DOBRAC DUŻĄ SKRZYNIE", "width": 120, "length": 60, "height": 70, "weight": 150, "canStack": false, "itemsPerCase": 1},
+  {"id": 142, "name": "P2.0 LED SPHERE / d=1,5m DOBRAC DUŻĄ SKRZYNIE", "width": 120, "length": 60, "height": 70, "weight": 150, "canStack": false, "itemsPerCase": 1},
 ]
