@@ -109,7 +109,7 @@
   {"id": 108, "name": "DICOLOR US-390 (wys. 74, ale stackowane na 2!)", "width": 110, "length": 82, "height": 110, "weight": 87, "canStack": true, "itemsPerCase": 6},
   {"id": 109, "name": "KINETIC Q / WINCH DMX kule dodaj napęd!", "width": 110, "length": 56, "height": 70, "weight": 40, "canStack": true, "itemsPerCase": 16},
   {"id": 110, "name": "KINETIC Q / WINCH DMX napęd dodaj kule!", "width": 71, "length": 54, "height": 70, "weight": 20, "canStack": true, "itemsPerCase": 8},
-  {"id": 111, "name": "P1.9 KINETIC LED CABINET / INDOOR", "width": 120, "length": 60, "height": 65, "weight": 95, "canStack": true, "itemsPerCase": 2},
+  {"id": 111, "name": "P1.9 KINETIC LED CABINET / INDOOR", "width": 120, "length": 60, "height": 80, "weight": 95, "canStack": true, "itemsPerCase": 2},
   {"id": 112, "name": "creaTUBE/360/1,5M", "width": 150, "length": 30, "height": 30, "weight": 50, "canStack": true, "itemsPerCase": 50},
   {"id": 113, "name": "creaTUBE/360/0,5M", "width": 50, "length": 30, "height": 30, "weight": 50, "canStack": true, "itemsPerCase": 50},
   {"id": 114, "name": "creaTUBE/360/1M", "width": 100, "length": 30, "height": 30, "weight": 50, "canStack": true, "itemsPerCase": 50},
